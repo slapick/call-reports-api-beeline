@@ -4,7 +4,7 @@
 
 - звонки — ``GET /napis/v3/statistics/recordsChart``;
 - сотрудники — ``GET /apis/portal/abonents``;
-- входящие номера — ``GET /apis/portal/numbers``.
+- кнопка «Проверить» — ``GET /apis/portal/numbers`` (самый лёгкий запрос).
 
 Авторизация — заголовок ``X-MPBX-API-AUTH-TOKEN`` с токеном API из личного
 кабинета Облачной АТС.
@@ -45,7 +45,6 @@ from infopanel_connect import egress
 
 CALLS = Entity("calls", "Звонки")
 OPERATORS = Entity("operators", "Сотрудники")
-NUMBERS = Entity("numbers", "Входящие номера")
 
 # --------------------------------------------------------------------------- #
 # API Облачной АТС Билайн: один адрес для всех клиентов, авторизация
@@ -130,17 +129,11 @@ COLUMNS: dict[str, list[Column]] = {
     "operators": [
         Column("user_id", "Логин", "string"),
         Column("phone", "Номер", "string"),
-        Column("first_name", "Имя", "string"),
-        Column("last_name", "Фамилия", "string"),
+        Column("name", "ФИО", "string"),
         Column("email", "Электронная почта", "string"),
         Column("contact_email", "Почта для уведомлений", "string"),
         Column("department", "Отдел", "string"),
         Column("extension", "Добавочный номер", "string"),
-    ],
-    # По ответу /apis/portal/numbers; phone — как calls.inbound_phone.
-    "numbers": [
-        Column("number_id", "ID номера", "string"),
-        Column("phone", "Номер", "string"),
     ],
 }
 
@@ -281,10 +274,11 @@ def _call_row(item: dict) -> dict:
 def _operator_row(item: dict) -> dict:
     """Абонент из /abonents → строка с ключами из COLUMNS["operators"]."""
     return {
-        "user_id": _text(item.get("userId")),
+        # «9000000000@pbx.example…» → «9000000000», как userId в звонках
+        "user_id": _text(str(item.get("userId") or "").split("@", 1)[0]),
         "phone": _text(item.get("phone")),
-        "first_name": _text(item.get("firstName")),
-        "last_name": _text(item.get("lastName")),
+        # Билайн кладёт ФИО целиком в firstName, lastName обычно не присылает
+        "name": _text(" ".join(str(item.get(k) or "") for k in ("firstName", "lastName"))),
         "email": _text(item.get("email")),
         "contact_email": _text(item.get("contactEmail")),
         "department": _text(item.get("department")),
@@ -292,22 +286,14 @@ def _operator_row(item: dict) -> dict:
     }
 
 
-def _number_row(item: dict) -> dict:
-    """Номер из /numbers → строка с ключами из COLUMNS["numbers"]."""
-    return {
-        "number_id": _text(item.get("numberId")),
-        "phone": _text(item.get("phone")),
-    }
-
-
 def _text(value):
-    """Строка или None; пустые строки — тоже None. 101.0 → «101»."""
+    """Строка без пробелов по краям или None; пустые — тоже None. 101.0 → «101»."""
     if value is None:
         return None
     if isinstance(value, float) and value.is_integer():
         value = int(value)
     text = value if isinstance(value, str) else str(value)
-    return text if text.strip() else None
+    return text.strip() or None
 
 
 def _number(value):
@@ -332,13 +318,13 @@ def _flag(value):
 
 
 class BeelineConnector(Connector):
-    """Телефония Билайн: звонки, сотрудники и входящие номера Облачной АТС."""
+    """Телефония Билайн: звонки и сотрудники Облачной АТС."""
 
     # --- Карточка в маркетплейсе (операция manifest) ----------------------- #
 
     name = "beeline-telephony"  # латиница/цифры/«-»/«_»; между версиями не менять
     label = "Телефония Билайн"
-    description = "Звонки, сотрудники и входящие номера Облачной АТС Билайн."
+    description = "Звонки и сотрудники Облачной АТС Билайн."
     version = "0.2.0"
     publisher = "ITGRN"
     docs_url = ""  # ссылка на документацию, если появится
@@ -366,7 +352,7 @@ class BeelineConnector(Connector):
     # --- Наборы данных известны заранее (операция entities) ---------------- #
     # entities() не переопределяем: базовый отдаст entity_catalog как есть.
 
-    entity_catalog = (CALLS, OPERATORS, NUMBERS)
+    entity_catalog = (CALLS, OPERATORS)
 
     # --- Данные (операция fetch) ------------------------------------------- #
 
@@ -383,9 +369,6 @@ class BeelineConnector(Connector):
         if entity == OPERATORS.id:
             items = await self._list(ctx, ABONENTS_PATH)
             return FetchResult([_operator_row(i) for i in items])
-        if entity == NUMBERS.id:
-            items = await self._list(ctx, NUMBERS_PATH)
-            return FetchResult([_number_row(i) for i in items])
 
         start, end, applied = _period(conditions)
         if start is None:
@@ -466,7 +449,7 @@ class BeelineConnector(Connector):
             payload = data.get("payload")
             if not isinstance(payload, dict):
                 raise UpstreamError("Облачная АТС Билайн ответила в неожиданном формате")
-            if payload.get("type") == "charts" or (payload.get("calls") is None and payload.get("chart")):
+            if str(payload.get("type") or "").lower() == "charts" or (payload.get("calls") is None and payload.get("chart")):
                 # Свыше 100 000 звонков Билайн отдаёт только количество по интервалам.
                 raise ConfigError("За период больше 100 000 звонков — уменьшите период датасета")
             page = [c for c in payload.get("calls") or [] if isinstance(c, dict)]

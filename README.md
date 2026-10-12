@@ -5,9 +5,8 @@
 
 | Сущность | Метод API | Связь |
 |---|---|---|
-| `calls` — звонки | `GET /napis/v3/statistics/recordsChart` | `*_user_id` → `operators.user_id`, `inbound_phone` → `numbers.phone` |
+| `calls` — звонки | `GET /napis/v3/statistics/recordsChart` | `*_user_id` → `operators.user_id` |
 | `operators` — сотрудники | `GET /apis/portal/abonents` | `user_id` |
-| `numbers` — входящие номера | `GET /apis/portal/numbers` | `phone` |
 
 Логические признаки отдаются числами 1/0 (логического типа у колонок SDK нет).
 Период датасета передаётся в API (`from`/`to`); без периода выгружаются последние 30 дней.
@@ -76,19 +75,11 @@ Dockerfile             образ сервиса
 |---|---|---|
 | `user_id` | string | Логин |
 | `phone` | string | Номер |
-| `first_name` | string | Имя |
-| `last_name` | string | Фамилия |
+| `name` | string | ФИО |
 | `email` | string | Электронная почта |
 | `contact_email` | string | Почта для уведомлений |
 | `department` | string | Отдел |
 | `extension` | string | Добавочный номер |
-
-### `numbers` — Входящие номера
-
-| Колонка | Тип | Описание |
-|---|---|---|
-| `number_id` | string | ID номера |
-| `phone` | string | Номер |
 
 ## Запуск без Docker
 
@@ -111,5 +102,7 @@ curl http://localhost:8090/health
 ```
 
 ## Подключение источника
+
+Кнопка «Проверить» обращается к `GET /apis/portal/numbers`.
 
 - **Токен API Облачной АТС** — из личного кабинета Облачной АТС Билайн (настройки API).

@@ -1,8 +1,5 @@
-"""Тесты коннектора Билайн: API подменяется ответами по схемам из документации.
-
-Реальных примеров ответов пока нет — данные составлены по схемам; замените
-на настоящие ответы, когда они будут.
-"""
+"""Тесты коннектора Билайн: API подменяется ответами в формате живого API
+(null у abonent/clientService, receivedByAbonents — массив, userId абонента с @домен)."""
 from __future__ import annotations
 
 import httpx
@@ -18,13 +15,13 @@ START_MS = 1790848800000
 
 CALL_IN = {
     "keyId": "k1", "startTime": START_MS, "direction": "INB", "status": "RECEIVED_BY_ABONENT",
-    "from": {"phone": "79000000001"},
-    "to": {"phone": "74950000021",
+    "from": {"phone": "79000000001", "abonent": None, "clientService": None},
+    "to": {"phone": "74950000021", "abonent": None,
            "clientService": {"name": "Группа продаж", "dtype": "GROUP", "extension": 700}},
     "inboundPhone": "74950000021", "duration": 23400, "hasCallRecording": True,
     "userTimezone": "Europe/Moscow", "isInternalCall": False, "externalTrackingId": "ext-1",
     "receivedByAbonents": [
-        {"userId": "ivanov", "name": "Иванов Иван", "department": "Продажи", "extension": 101},
+        {"userId": "ivanov", "name": "Иванов Иван ", "department": "Продажи", "extension": 101},
         {"userId": "petrov", "name": "Петров Пётр", "department": "Продажи", "extension": 102},
     ],
 }
@@ -48,10 +45,10 @@ CALL_MISSED = {
 }
 
 STATISTICS = {"ts": START_MS, "type": "success",
-              "payload": {"totalCount": 3, "type": "log", "calls": [CALL_IN, CALL_OUT, CALL_MISSED]}}
+              "payload": {"totalCount": 3, "type": "LOG", "calls": [CALL_IN, CALL_OUT, CALL_MISSED]}}
 
 ABONENTS = [
-    {"userId": "ivanov", "phone": "74950000001", "firstName": "Иван", "lastName": "Иванов",
+    {"userId": "ivanov@pbx.example.org", "phone": "74950000001", "firstName": "Иван", "lastName": "Иванов",
      "email": "ivanov@x.ru", "contactEmail": "", "department": "Продажи", "extension": "101"},
     {"userId": "petrov", "phone": "74950000002", "firstName": "Пётр", "lastName": "Петров"},
 ]
@@ -107,7 +104,8 @@ async def test_calls_and_period(api):
     assert incoming["to_service_name"] == "Группа продаж" and incoming["to_service_extension"] == "700"
     # receivedByAbonents — первый в массиве (последний принявший)
     assert incoming["received_user_id"] == "ivanov" and incoming["received_extension"] == "101"
-    assert incoming["employee_user_id"] == "ivanov"
+    assert incoming["employee_user_id"] == "ivanov" and incoming["employee_name"] == "Иванов Иван"
+    assert incoming["from_user_id"] is None and incoming["from_service_name"] is None
 
     assert outgoing["employee_name"] == "Петров Пётр"  # исходящий — сторона А
     assert outgoing["inbound_phone"] is None and outgoing["received_user_id"] is None
@@ -120,12 +118,10 @@ async def test_default_period(api):
     assert params["from"].endswith(".000Z") and "to" not in params
 
 
-async def test_operators_and_numbers(api):
+async def test_operators(api):
     operators = (await BeelineConnector().fetch(ctx(), "operators", ())).rows
-    assert operators[0]["last_name"] == "Иванов" and operators[0]["contact_email"] is None
+    assert operators[0]["user_id"] == "ivanov" and operators[0]["name"] == "Иван Иванов" and operators[0]["contact_email"] is None
     assert operators[1]["department"] is None
-    numbers = (await BeelineConnector().fetch(ctx(), "numbers", ())).rows
-    assert numbers == [{"number_id": "n1", "phone": "74950000021"}]
 
 
 async def test_calls_are_paged(monkeypatch):
@@ -145,7 +141,7 @@ async def test_calls_are_paged(monkeypatch):
 @pytest.mark.parametrize(
     "answer, error",
     [
-        ({"payload": {"totalCount": 150000, "type": "charts", "chart": {"items": []}}}, ConfigError),
+        ({"payload": {"totalCount": 150000, "type": "CHARTS", "chart": {"items": []}}}, ConfigError),
         ({"errors": [{"exception": "ValidationException", "message": "from is required"}]}, UpstreamError),
     ],
 )
