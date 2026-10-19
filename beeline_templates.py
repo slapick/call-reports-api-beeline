@@ -371,6 +371,7 @@ OUTBOUND_MONTH = DatasetTemplate(
         Output("attempts", "Исходящих за месяц", "number", format="integer"),
         Output("reached", "Дозвонов за месяц", "number", value=ANSWERED, format="integer"),
         Output("reach_share", "Доля дозвона", "number", value=ANSWERED, fn="avg", format="percent"),
+        Output("by_result", "Дозвонились или нет", "breakdown", by=STATUS),
         Output("avg_talk", "Средний разговор, мин", "number", value=MINUTES, fn="avg", branch="reached",
                format="decimal"),
         Output("minutes", "Минут исходящих", "number", value=MINUTES, format="integer"),

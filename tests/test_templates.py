@@ -205,3 +205,11 @@ def test_missed_by_employee_and_rating():
     assert (rating["Иванов Иван"]["Звонков"], rating["Иванов Иван"]["Входящих"]) == (2, 2)
     assert (rating["Иванов Иван"]["Разговоров"], rating["Иванов Иван"]["Пропущено"]) == (1, 1)
     assert (rating["Петров Пётр"]["Звонков"], rating["Петров Пётр"]["Входящих"]) == (1, 0)
+
+
+def test_outbound_result_has_two_values():
+    """«Дозвонились или нет» — разбивка исходящих по статусу: ровно два значения."""
+    placed = {**CALL_OUT, "keyId": "k6", "status": "PLACED"}
+    rows = run(t.OUTBOUND_MONTH.steps, rows_of(CALL_IN, CALL_OUT, CALL_MISSED, placed))
+    by = next(o.by for o in t.OUTBOUND_MONTH.outputs if o.id == "by_result")
+    assert sorted(r[by] for r in rows) == ["Дозвонился", "Не дозвонился"]
