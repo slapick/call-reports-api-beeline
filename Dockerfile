@@ -11,7 +11,7 @@ ARG PIP_EXTRA_INDEX_URL=https://pypi.org/simple
 COPY requirements.txt /app/requirements.txt
 RUN pip install --index-url "$PIP_INDEX_URL" --extra-index-url "$PIP_EXTRA_INDEX_URL" -r /app/requirements.txt
 
-COPY beeline_connector.py /app/beeline_connector.py
+COPY beeline_connector.py beeline_templates.py /app/
 WORKDIR /app
 RUN useradd --system --uid 10001 connector
 USER connector

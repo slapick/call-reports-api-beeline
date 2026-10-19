@@ -39,6 +39,8 @@ from infopanel_connect import (
 )
 from infopanel_connect import egress
 
+from beeline_templates import DASHBOARDS, DATASETS, QUICK_START, WIDGETS
+
 # --------------------------------------------------------------------------- #
 # Сущности (таблицы), которые коннектор отдаёт платформе.
 # id уникален в пределах источника; подпись видит пользователь.
@@ -368,7 +370,7 @@ class BeelineConnector(Connector):
     name = "beeline-telephony"  # латиница/цифры/«-»/«_»; между версиями не менять
     label = "Телефония Билайн"
     description = "Звонки и сотрудники Облачной АТС Билайн."
-    version = "0.2.0"
+    version = "0.3.0"
     publisher = "ITGRN"
     docs_url = ""  # ссылка на документацию, если появится
 
@@ -396,6 +398,13 @@ class BeelineConnector(Connector):
     # entities() не переопределяем: базовый отдаст entity_catalog как есть.
 
     entity_catalog = (CALLS, OPERATORS)
+
+    # --- Готовые датасеты, виджеты и дашборды (beeline_templates.py) ------- #
+
+    datasets = DATASETS
+    widgets = WIDGETS
+    dashboards = DASHBOARDS
+    quick_start = QUICK_START
 
     # --- Данные (операция fetch) ------------------------------------------- #
 
