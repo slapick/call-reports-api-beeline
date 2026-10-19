@@ -24,6 +24,7 @@ connector-sdk (https://gitlab.itgrn.ru/infopanel/connector-sdk).
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from infopanel_connect import (
     Column,
@@ -73,6 +74,14 @@ STATUSES: dict[str, str] = {
     "OUTMISSED": "Не дозвонился",
     "PLACED": "Дозвонился",
 }
+ANSWERED = frozenset({"RECEIVED_BY_ABONENT", "RECEIVED", "PLACED"})  # разговор состоялся
+MISSED = frozenset({"INBMISSED_BY_ABONENT", "INBMISSED"})  # входящий без ответа
+
+# Час и день недели считаем по часам АТС: date — в UTC, а «звонки с 9 до 10»
+# и «в понедельник» клиент понимает по своему времени. Пояс — из userTimezone
+# звонка; если его нет или он незнакомый — московский.
+DEFAULT_TIMEZONE = "Europe/Moscow"
+WEEKDAYS = ("1 Пн", "2 Вт", "3 Ср", "4 Чт", "5 Пт", "6 Сб", "7 Вс")  # номер — чтобы сортировались по порядку
 
 # --------------------------------------------------------------------------- #
 # Колонки сущностей: имена — для платформы, подписи — для людей.
@@ -124,6 +133,14 @@ COLUMNS: dict[str, list[Column]] = {
         *_abonent_columns("received", "Принял"),
         # Вычисляемые: сотрудник АТС, к которому относится звонок (см. _employee).
         *_abonent_columns("employee", "Сотрудник"),
+        # Вычисляемые для отчётов (см. _call_row): шаги датасета не умеют «если».
+        Column("client_phone", "Номер клиента", "string"),
+        Column("is_inbound", "Входящий", "number"),
+        Column("is_answered", "Разговор состоялся", "number"),
+        Column("is_missed", "Пропущенный входящий", "number"),
+        Column("minutes", "Длительность разговора, мин", "number"),
+        Column("hour", "Час начала (по времени АТС)", "string"),
+        Column("weekday", "День недели (по времени АТС)", "string"),
     ],
     # По ответу /apis/portal/abonents; user_id совпадает с calls.*_user_id.
     "operators": [
@@ -179,17 +196,33 @@ def _period(conditions: tuple[Condition, ...]):
     return start, end, tuple(applied)
 
 
-def _timestamp(value) -> str | None:
-    """startTime (мс от 1970 года, в UTC) → ISO-строка. Секунды тоже понимаем."""
+def _moment(value) -> datetime | None:
+    """startTime (мс от 1970 года, в UTC) → datetime в UTC. Секунды тоже понимаем."""
     number = _number(value)
     if number is None:
         return None
     seconds = number / 1000 if abs(number) >= 1e11 else number
     try:
-        moment = datetime.fromtimestamp(seconds, tz=timezone.utc)
+        return datetime.fromtimestamp(seconds, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
         return None
-    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _zone(name) -> ZoneInfo:
+    """Часовой пояс АТС из userTimezone; нет или незнакомый — московский."""
+    try:
+        return ZoneInfo(str(name).strip())
+    except (ZoneInfoNotFoundError, ValueError, OSError):
+        return ZoneInfo(DEFAULT_TIMEZONE)
+
+
+def _client_phone(item: dict, direction: str | None) -> str | None:
+    """Номер собеседника вне АТС: у входящего — сторона А, у исходящего — Б."""
+    if _flag(item.get("isInternalCall")):
+        return None
+    side = {"INB": "from", "OUT": "to"}.get(direction or "")
+    party = item.get(side) if side else None
+    return _text(party.get("phone")) if isinstance(party, dict) else None
 
 
 def _received(value) -> dict:
@@ -251,14 +284,17 @@ def _call_row(item: dict) -> dict:
     direction = _text(item.get("direction"))
     status = _text(item.get("status"))
     duration_ms = _number(item.get("duration"))
+    seconds = round(duration_ms / 1000) if duration_ms is not None else None
+    moment = _moment(item.get("startTime"))
+    local = moment.astimezone(_zone(item.get("userTimezone"))) if moment else None
     return {
         "id": _text(item.get("keyId")),
-        "date": _timestamp(item.get("startTime")),
+        "date": moment.strftime("%Y-%m-%dT%H:%M:%SZ") if moment else None,
         "direction": direction,
         "direction_name": DIRECTIONS.get(direction or "", direction),
         "status": status,
         "status_name": STATUSES.get(status or "", status),
-        "duration": round(duration_ms / 1000) if duration_ms is not None else None,
+        "duration": seconds,
         "inbound_phone": _text(item.get("inboundPhone")),
         "has_recording": _flag(item.get("hasCallRecording")),
         "is_internal": _flag(item.get("isInternalCall")),
@@ -268,6 +304,13 @@ def _call_row(item: dict) -> dict:
         **_party_values("to", item.get("to")),
         **_abonent_values("received", _received(item.get("receivedByAbonents"))),
         **_abonent_values("employee", _employee(item)),
+        "client_phone": _client_phone(item, direction),
+        "is_inbound": {"INB": 1, "OUT": 0}.get(direction or ""),
+        "is_answered": (1 if status in ANSWERED else 0) if status else None,
+        "is_missed": (1 if status in MISSED else 0) if status else None,
+        "minutes": round(seconds / 60, 2) if seconds is not None else None,
+        "hour": f"{local.hour:02d}:00" if local else None,
+        "weekday": WEEKDAYS[local.weekday()] if local else None,
     }
 
 

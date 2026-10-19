@@ -2,6 +2,8 @@
 (null у abonent/clientService, receivedByAbonents — массив, userId абонента с @домен)."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import httpx
 import pytest
 
@@ -110,6 +112,56 @@ async def test_calls_and_period(api):
     assert outgoing["employee_name"] == "Петров Пётр"  # исходящий — сторона А
     assert outgoing["inbound_phone"] is None and outgoing["received_user_id"] is None
     assert missed["employee_user_id"] == "ivanov"  # никто не принял — сторона Б
+
+
+async def test_report_columns(api):
+    incoming, outgoing, missed = (await BeelineConnector().fetch(ctx(), "calls", ())).rows
+    # номер клиента: у входящего — сторона А, у исходящего — сторона Б
+    assert incoming["client_phone"] == "79000000001" and outgoing["client_phone"] == "79000000001"
+    assert missed["client_phone"] == "79990000001"
+    assert [r["is_inbound"] for r in (incoming, outgoing, missed)] == [1, 0, 1]
+    assert [r["is_answered"] for r in (incoming, outgoing, missed)] == [1, 0, 0]
+    assert [r["is_missed"] for r in (incoming, outgoing, missed)] == [0, 0, 1]
+    assert incoming["minutes"] == 0.38 and outgoing["minutes"] == 0  # 23 сек
+    # 10:00 UTC — 13:00 по Москве; 1 октября 2026 — четверг
+    assert (incoming["hour"], incoming["weekday"]) == ("13:00", "4 Чт")
+    assert (missed["hour"], missed["weekday"]) == ("13:00", "4 Чт")  # без userTimezone — Москва
+
+
+@pytest.mark.parametrize(
+    "utc, zone, hour, weekday",
+    [
+        ("2026-10-01T10:00:00Z", "Europe/Moscow", "13:00", "4 Чт"),
+        # воскресенье 22:30 UTC — уже понедельник по Москве
+        ("2026-10-04T22:30:00Z", "Europe/Moscow", "01:00", "1 Пн"),
+        ("2026-10-04T20:59:59Z", "Europe/Moscow", "23:00", "7 Вс"),
+        ("2026-10-01T10:00:00Z", "Asia/Yekaterinburg", "15:00", "4 Чт"),
+        ("2026-10-01T22:00:00Z", "Asia/Vladivostok", "08:00", "5 Пт"),
+        ("2026-10-01T10:00:00Z", "UTC", "10:00", "4 Чт"),
+        ("2026-10-01T10:00:00Z", None, "13:00", "4 Чт"),
+        ("2026-10-01T10:00:00Z", "", "13:00", "4 Чт"),
+        ("2026-10-01T10:00:00Z", "Марс/Олимп", "13:00", "4 Чт"),
+    ],
+)
+def test_hour_and_weekday_in_pbx_timezone(utc, zone, hour, weekday):
+    moment = datetime.fromisoformat(utc.replace("Z", "+00:00"))
+    row = beeline_connector._call_row({**CALL_IN, "startTime": int(moment.timestamp() * 1000), "userTimezone": zone})
+    assert row["date"] == utc  # date остаётся в UTC
+    assert (row["hour"], row["weekday"]) == (hour, weekday)
+
+
+def test_report_columns_edge_cases():
+    internal = beeline_connector._call_row({**CALL_IN, "isInternalCall": True})
+    assert internal["client_phone"] is None  # внутренний — клиента нет
+    received_by_service = beeline_connector._call_row({**CALL_IN, "status": "RECEIVED"})
+    assert (received_by_service["is_answered"], received_by_service["is_missed"]) == (1, 0)
+    by_service = beeline_connector._call_row({**CALL_IN, "status": "INBMISSED"})
+    assert (by_service["is_answered"], by_service["is_missed"]) == (0, 1)
+    placed = beeline_connector._call_row({**CALL_OUT, "status": "PLACED", "duration": 600_000})
+    assert (placed["is_answered"], placed["minutes"]) == (1, 10)
+    empty = beeline_connector._call_row({"keyId": "x"})
+    for column in ("client_phone", "is_inbound", "is_answered", "is_missed", "minutes", "hour", "weekday", "date"):
+        assert empty[column] is None
 
 
 async def test_default_period(api):
