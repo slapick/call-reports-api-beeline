@@ -140,6 +140,10 @@ COLUMNS: dict[str, list[Column]] = {
         Column("is_inbound", "Входящий", "number"),
         Column("is_answered", "Разговор состоялся", "number"),
         Column("is_missed", "Пропущенный входящий", "number"),
+        # Те же флаги как 100/0: среднее — сразу проценты. Формат percent
+        # платформы только дописывает знак «%» (0,25 → «0,3%»), а не умножает.
+        Column("answered_percent", "Разговор состоялся, % (100/0)", "number"),
+        Column("missed_percent", "Пропущенный входящий, % (100/0)", "number"),
         Column("minutes", "Длительность разговора, мин", "number"),
         Column("hour", "Час начала (по времени АТС)", "string"),
         Column("weekday", "День недели (по времени АТС)", "string"),
@@ -289,6 +293,8 @@ def _call_row(item: dict) -> dict:
     seconds = round(duration_ms / 1000) if duration_ms is not None else None
     moment = _moment(item.get("startTime"))
     local = moment.astimezone(_zone(item.get("userTimezone"))) if moment else None
+    answered = (1 if status in ANSWERED else 0) if status else None
+    missed = (1 if status in MISSED else 0) if status else None
     return {
         "id": _text(item.get("keyId")),
         "date": moment.strftime("%Y-%m-%dT%H:%M:%SZ") if moment else None,
@@ -308,8 +314,10 @@ def _call_row(item: dict) -> dict:
         **_abonent_values("employee", _employee(item)),
         "client_phone": _client_phone(item, direction),
         "is_inbound": {"INB": 1, "OUT": 0}.get(direction or ""),
-        "is_answered": (1 if status in ANSWERED else 0) if status else None,
-        "is_missed": (1 if status in MISSED else 0) if status else None,
+        "is_answered": answered,
+        "is_missed": missed,
+        "answered_percent": answered * 100 if answered is not None else None,
+        "missed_percent": missed * 100 if missed is not None else None,
         "minutes": round(seconds / 60, 2) if seconds is not None else None,
         "hour": f"{local.hour:02d}:00" if local else None,
         "weekday": WEEKDAYS[local.weekday()] if local else None,

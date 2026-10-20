@@ -122,6 +122,8 @@ async def test_report_columns(api):
     assert [r["is_inbound"] for r in (incoming, outgoing, missed)] == [1, 0, 1]
     assert [r["is_answered"] for r in (incoming, outgoing, missed)] == [1, 0, 0]
     assert [r["is_missed"] for r in (incoming, outgoing, missed)] == [0, 0, 1]
+    assert [r["answered_percent"] for r in (incoming, outgoing, missed)] == [100, 0, 0]
+    assert [r["missed_percent"] for r in (incoming, outgoing, missed)] == [0, 0, 100]
     assert incoming["minutes"] == 0.38 and outgoing["minutes"] == 0  # 23 сек
     # 10:00 UTC — 13:00 по Москве; 1 октября 2026 — четверг
     assert (incoming["hour"], incoming["weekday"]) == ("13:00", "4 Чт")
@@ -160,7 +162,8 @@ def test_report_columns_edge_cases():
     placed = beeline_connector._call_row({**CALL_OUT, "status": "PLACED", "duration": 600_000})
     assert (placed["is_answered"], placed["minutes"]) == (1, 10)
     empty = beeline_connector._call_row({"keyId": "x"})
-    for column in ("client_phone", "is_inbound", "is_answered", "is_missed", "minutes", "hour", "weekday", "date"):
+    for column in ("client_phone", "is_inbound", "is_answered", "is_missed", "answered_percent", "missed_percent",
+                   "minutes", "hour", "weekday", "date"):
         assert empty[column] is None
 
 
