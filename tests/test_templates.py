@@ -89,6 +89,27 @@ def test_columns_exist(dataset):
                 assert field in result, f"{dataset.id}.{output.id}: нет колонки {field!r} среди {sorted(result)}"
 
 
+PERCENT_COLUMNS = {"calls.answered_percent", "calls.missed_percent"}
+
+
+@pytest.mark.parametrize("dataset", t.DATASETS, ids=lambda d: d.id)
+def test_percents_are_averages_of_100_0_flags(dataset):
+    """Формат percent только дописывает «%»: доля — среднее колонки 100/0, а не флага 1/0."""
+    for output in dataset.outputs:
+        if output.format == "percent":
+            assert (output.fn, output.value) in {("avg", c) for c in PERCENT_COLUMNS}, f"{dataset.id}.{output.id}"
+        if output.value in PERCENT_COLUMNS:
+            assert output.format == "percent", f"{dataset.id}.{output.id}: процент без format=percent"
+
+
+def test_percent_widgets_show_percent_outputs():
+    outputs = {(d.id, o.id): o for d in t.DATASETS for o in d.outputs}
+    for widget in t.WIDGETS:
+        output = outputs[(widget.dataset, widget.output)]
+        is_percent = widget.options.get("number_format") == "percent"
+        assert is_percent == (output.format == "percent"), widget.id
+
+
 # --------------------------------------------------------------------------- #
 # Дашборды
 # --------------------------------------------------------------------------- #
@@ -213,3 +234,10 @@ def test_outbound_result_has_two_values():
     rows = run(t.OUTBOUND_MONTH.steps, rows_of(CALL_IN, CALL_OUT, CALL_MISSED, placed))
     by = next(o.by for o in t.OUTBOUND_MONTH.outputs if o.id == "by_result")
     assert sorted(r[by] for r in rows) == ["Дозвонился", "Не дозвонился"]
+
+
+def test_missed_share_is_in_percent():
+    """2 входящих, 1 пропущен → среднее missed_percent = 50, на виджете «50%»."""
+    rows = run(t.INBOUND_MONTH.steps, rows_of(CALL_IN, CALL_OUT, CALL_MISSED))
+    values = [r["calls.missed_percent"] for r in rows]
+    assert sum(values) / len(values) == 50

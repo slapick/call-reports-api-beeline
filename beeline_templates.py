@@ -37,6 +37,9 @@ DIRECTION = "calls.direction_name"
 ANSWERED = "calls.is_answered"
 MISSED = "calls.is_missed"
 INBOUND = "calls.is_inbound"
+# Для долей — флаги 100/0: формат percent только дописывает «%», не умножает.
+ANSWERED_PERCENT = "calls.answered_percent"
+MISSED_PERCENT = "calls.missed_percent"
 
 # --------------------------------------------------------------------------- #
 # Повторяющиеся шаги. Период и условия в начале цепочки платформа передаёт
@@ -116,7 +119,7 @@ CALLS_TODAY = DatasetTemplate(
     ),
     outputs=(
         *kpis("сегодня"),
-        Output("missed_share", "Доля пропущенных входящих сегодня", "number", value=MISSED, fn="avg",
+        Output("missed_share", "Доля пропущенных входящих сегодня", "number", value=MISSED_PERCENT, fn="avg",
                branch="inbound", format="percent"),
         by_hour(),
         Output("by_type", "Входящие и исходящие сегодня", "breakdown", by=DIRECTION),
@@ -174,10 +177,10 @@ OUTBOUND_TODAY = DatasetTemplate(
     outputs=(
         Output("attempts", "Исходящих сегодня", "number", format="integer"),
         Output("reached", "Дозвонов сегодня", "number", value=ANSWERED, format="integer"),
-        Output("reach_share", "Доля дозвона сегодня", "number", value=ANSWERED, fn="avg", format="percent"),
+        Output("reach_share", "Доля дозвона сегодня", "number", value=ANSWERED_PERCENT, fn="avg", format="percent"),
         Output("minutes", "Минут исходящих сегодня", "number", value=MINUTES, format="integer"),
         Output("by_employee", "Исходящие сегодня по сотрудникам", "breakdown", by=WHO),
-        Output("reach_by_employee", "Доля дозвона по сотрудникам", "breakdown", value=ANSWERED, fn="avg",
+        Output("reach_by_employee", "Доля дозвона по сотрудникам", "breakdown", value=ANSWERED_PERCENT, fn="avg",
                by=WHO, format="percent"),
         by_hour("Исходящие по часам"),
         Output("employees", "Обзвон сегодня: сотрудники", "table", branch="by_employee", limit=50),
@@ -215,7 +218,7 @@ CALLS_MONTH = DatasetTemplate(
     ),
     outputs=(
         *kpis("за месяц"),
-        Output("missed_share", "Доля пропущенных входящих", "number", value=MISSED, fn="avg",
+        Output("missed_share", "Доля пропущенных входящих", "number", value=MISSED_PERCENT, fn="avg",
                branch="inbound", format="percent"),
         Output("by_day", "Звонки по дням", "series", by=CALL_AT),
         Output("minutes_by_day", "Минуты по дням", "series", value=MINUTES, by=CALL_AT),
@@ -242,7 +245,7 @@ CALLS_LAST_MONTH = DatasetTemplate(
     ),
     outputs=(
         *kpis("за прошлый месяц"),
-        Output("missed_share", "Доля пропущенных входящих за прошлый месяц", "number", value=MISSED, fn="avg",
+        Output("missed_share", "Доля пропущенных входящих за прошлый месяц", "number", value=MISSED_PERCENT, fn="avg",
                branch="inbound", format="percent"),
         Output("by_day", "Звонки по дням", "series", by=CALL_AT),
         Output("by_type", "Входящие и исходящие", "breakdown", by=DIRECTION),
@@ -260,11 +263,11 @@ INBOUND_MONTH = DatasetTemplate(
         Output("calls", "Входящих за месяц", "number", format="integer"),
         Output("answered", "Принято за месяц", "number", value=ANSWERED, format="integer"),
         Output("missed", "Пропущено за месяц", "number", value=MISSED, format="integer"),
-        Output("missed_share", "Доля пропущенных", "number", value=MISSED, fn="avg", format="percent"),
+        Output("missed_share", "Доля пропущенных", "number", value=MISSED_PERCENT, fn="avg", format="percent"),
         Output("minutes", "Минут входящих", "number", value=MINUTES, format="integer"),
         Output("by_day", "Входящие по дням", "series", by=CALL_AT),
         Output("missed_by_day", "Пропущенные по дням", "series", value=MISSED, by=CALL_AT),
-        Output("missed_share_by_day", "Доля пропущенных по дням", "series", value=MISSED, fn="avg",
+        Output("missed_share_by_day", "Доля пропущенных по дням", "series", value=MISSED_PERCENT, fn="avg",
                by=CALL_AT, format="percent"),
         Output("by_status", "Чем закончились входящие", "breakdown", by=STATUS),
         Output("by_line", "Входящие по линиям", "breakdown", by=LINE),
@@ -318,7 +321,7 @@ LINES_MONTH = DatasetTemplate(
         Output("by_line", "Звонки по номерам", "breakdown", by=LINE),
         Output("clients_by_line", "Клиенты по номерам", "breakdown", value=CLIENT, fn="count_distinct", by=LINE),
         Output("missed_by_line", "Пропущенные по номерам", "breakdown", value=MISSED, by=LINE),
-        Output("missed_share_by_line", "Доля пропущенных по номерам", "breakdown", value=MISSED, fn="avg",
+        Output("missed_share_by_line", "Доля пропущенных по номерам", "breakdown", value=MISSED_PERCENT, fn="avg",
                by=LINE, format="percent"),
         Output("lines", "Многоканальные номера", "table", branch="by_line", limit=50),
     ),
@@ -370,7 +373,7 @@ OUTBOUND_MONTH = DatasetTemplate(
     outputs=(
         Output("attempts", "Исходящих за месяц", "number", format="integer"),
         Output("reached", "Дозвонов за месяц", "number", value=ANSWERED, format="integer"),
-        Output("reach_share", "Доля дозвона", "number", value=ANSWERED, fn="avg", format="percent"),
+        Output("reach_share", "Доля дозвона", "number", value=ANSWERED_PERCENT, fn="avg", format="percent"),
         Output("by_result", "Дозвонились или нет", "breakdown", by=STATUS),
         Output("avg_talk", "Средний разговор, мин", "number", value=MINUTES, fn="avg", branch="reached",
                format="decimal"),
@@ -378,7 +381,7 @@ OUTBOUND_MONTH = DatasetTemplate(
         Output("by_day", "Исходящие по дням", "series", by=CALL_AT),
         Output("reached_by_day", "Дозвоны по дням", "series", value=ANSWERED, by=CALL_AT),
         Output("by_employee", "Исходящие по сотрудникам", "breakdown", by=WHO),
-        Output("reach_by_employee", "Доля дозвона по сотрудникам", "breakdown", value=ANSWERED, fn="avg",
+        Output("reach_by_employee", "Доля дозвона по сотрудникам", "breakdown", value=ANSWERED_PERCENT, fn="avg",
                by=WHO, format="percent"),
         Output("employees", "Обзвон: сотрудники", "table", branch="by_employee", limit=50),
         Output("short", "Разговоров короче 10 секунд", "number", branch="short", format="integer"),
@@ -411,7 +414,7 @@ EMPLOYEES_MONTH = DatasetTemplate(
         Output("by_employee", "Звонки по сотрудникам", "breakdown", by=WHO),
         Output("minutes_by_employee", "Минуты по сотрудникам", "breakdown", value=MINUTES, by=WHO),
         Output("missed_by_employee", "Пропущенные по сотрудникам", "breakdown", value=MISSED, by=WHO),
-        Output("missed_share_by_employee", "Доля пропущенных по сотрудникам", "breakdown", value=MISSED,
+        Output("missed_share_by_employee", "Доля пропущенных по сотрудникам", "breakdown", value=MISSED_PERCENT,
                fn="avg", by=WHO, branch="inbound", format="percent"),
         Output("avg_talk_by_employee", "Средний разговор по сотрудникам, мин", "breakdown", value=MINUTES,
                fn="avg", by=WHO, branch="talks", format="decimal"),
@@ -437,7 +440,7 @@ DEPARTMENTS_MONTH = DatasetTemplate(
         Output("by_department", "Звонки по отделам", "breakdown", by=DEPARTMENT),
         Output("minutes_by_department", "Минуты по отделам", "breakdown", value=MINUTES, by=DEPARTMENT),
         Output("missed_by_department", "Пропущенные по отделам", "breakdown", value=MISSED, by=DEPARTMENT),
-        Output("missed_share_by_department", "Доля пропущенных по отделам", "breakdown", value=MISSED, fn="avg",
+        Output("missed_share_by_department", "Доля пропущенных по отделам", "breakdown", value=MISSED_PERCENT, fn="avg",
                by=DEPARTMENT, branch="inbound", format="percent"),
         Output("departments", "Отделы", "table", branch="by_department", limit=50),
     ),
